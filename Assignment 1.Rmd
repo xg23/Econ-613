@@ -5,3 +5,23 @@ date: "1/24/2019"
 output: pdf_document
 ---
 
+```{r}
+# Load packages
+library(dplyr)
+library(purrr)
+library(magrittr)
+library(tidyr)
+library(tibble)
+
+
+# Read data
+jss <- read.csv("datjss.csv", header=T, fileEncoding  = "UTF-8", sep=",")
+sss <- read.csv("datsss.csv", header=T, fileEncoding  = "UTF-8", sep=",")
+stu <- read.csv("datstu.csv", header=T, fileEncoding  = "UTF-8", sep=",")
+```
+
+
+
+
+
+
