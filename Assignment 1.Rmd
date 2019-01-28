@@ -23,15 +23,22 @@ stu <- read.csv("datstu.csv", header=T, sep=",", na.strings=c(""," ","NA"))
 
 ## Exercise 1
 * Number of students: 340823
+```{r}
+summary(stu)
+```
+
 * Number of schools: 6165
+```{r}
+summary(sss)
+```
+
 * Number of programs: 33
 ```{r}
 pgm <- stu %>% 
   select(starts_with("choice")) %>% # get a subset of stu (choicepgm1 ~ 6)
   map(., function(x) unique(x)) %>% # find the number of programs in each "choicepgm"
   unlist %>% 
-  unique() %>%  # join all the unique programs in 6 choices and find the unique value. 
-  # Note that one program does not have a name. 
+  unique() %>%  # join all the unique programs in 6 choices and find the unique value.
   length() 
 ```
 
@@ -39,21 +46,24 @@ pgm <- stu %>%
 ```{r}
 stu1 <- stu %>%
   subset(., is.na(.[5:16]))
-  
  #  drop_na(., schoolcode1:choicepgm6) # tease out NAs in shool and program choices
-  
-  
+
+
 #  map(., function(x) gsub("^$|^ $", NA, x)) # replace all empty cells with NAs. 
-
-  
- 
-
-
 ```
 
 * Missing test score: 179887 (number of NAs in "score" in datstu)
+
 * Apply to the same school (different programs)
 ```{r}
+stu2 <- stu %>%
+  select(5:16) %>%
+  apply(., 1, function(x) duplicated(x))
+
+a <- stu[2,]
+class(a)
+duplicated(a)
+
 
 ```
 
@@ -67,16 +77,27 @@ stu3 <- drop_na(stu, starts_with("choice"))
 340823 - count(stu3)
 
 # na.omit(stu[11:16])
-
-```
-
-
-```{r}
-summary(stu)
-summary(sss)
 ```
 
 
 ## Excercise 2
+```{r}
+# drop students that are not get enrolled in any school-pgm.
+stu4 <- stu %>% 
+  filter(!is.na(rankplace)) %>% # drop NAs in rankplace
+  filter(rankplace < 7) %>%     # drop 99s in rankplace
+  mutate(schpgm <- )
+
+paste(stu4$schoolcode1, stu4$choicepgm1, sep = ",", collapse = NULL)
+
+
+
+map(., )
+stu4$rankplace[[i]]
+
+
+
+
+```
 
 
