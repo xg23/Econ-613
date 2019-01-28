@@ -5,23 +5,78 @@ date: "1/24/2019"
 output: pdf_document
 ---
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 # Load packages
 library(dplyr)
 library(purrr)
 library(magrittr)
 library(tidyr)
 library(tibble)
-
+library(stringr)
 
 # Read data
-jss <- read.csv("datjss.csv", header=T, fileEncoding  = "UTF-8", sep=",")
-sss <- read.csv("datsss.csv", header=T, fileEncoding  = "UTF-8", sep=",")
-stu <- read.csv("datstu.csv", header=T, fileEncoding  = "UTF-8", sep=",")
+jss <- read.csv("datjss.csv", header=T, sep=",")
+sss <- read.csv("datsss.csv", header=T, sep=",")
+stu <- read.csv("datstu.csv", header=T, sep=",", na.strings=c(""," ","NA"))
+# Note that there are empty cells in stu, we replace them with NAs first.
+```
+
+## Exercise 1
+* Number of students: 340823
+* Number of schools: 6165
+* Number of programs: 33
+```{r}
+pgm <- stu %>% 
+  select(starts_with("choice")) %>% # get a subset of stu (choicepgm1 ~ 6)
+  map(., function(x) unique(x)) %>% # find the number of programs in each "choicepgm"
+  unlist %>% 
+  unique() %>%  # join all the unique programs in 6 choices and find the unique value. 
+  # Note that one program does not have a name. 
+  length() 
+```
+
+* Number of choices (school, program): 
+```{r}
+stu1 <- stu %>%
+  subset(., is.na(.[5:16]))
+  
+ #  drop_na(., schoolcode1:choicepgm6) # tease out NAs in shool and program choices
+  
+  
+#  map(., function(x) gsub("^$|^ $", NA, x)) # replace all empty cells with NAs. 
+
+  
+ 
+
+
+```
+
+* Missing test score: 179887 (number of NAs in "score" in datstu)
+* Apply to the same school (different programs)
+```{r}
+
+```
+
+* Apply to less than 6 choices: 20988
+
+```{r}
+# rule out NAs in choicepgm, leaving us students who apply 6 choices
+stu3 <- drop_na(stu, starts_with("choice"))
+
+# then students who apply less than 6 choices should be total number of students minus those who apply 6 choices:
+340823 - count(stu3)
+
+# na.omit(stu[11:16])
+
 ```
 
 
+```{r}
+summary(stu)
+summary(sss)
+```
 
 
+## Excercise 2
 
 
