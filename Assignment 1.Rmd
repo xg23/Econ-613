@@ -121,8 +121,8 @@ The distance between junior high school and senior high school is given by the v
 ```{r message=FALSE, warning=FALSE}
 # create an individual level dataset where each row is a pair of individual and school choice
 id_ss <- stu %>%
-  select(X, schoolcode1:schoolcode6, jssdistrict) %>%
-  gather(key = 'seniorhigh', 'schoolcode', -X, -jssdistrict) %>%
+  select(X, schoolcode1:schoolcode6, jssdistrict, rankplace) %>%
+  gather(key = 'seniorhigh', 'schoolcode', -X, -jssdistrict, -rankplace) %>%
   mutate(id = paste(X, schoolcode, sep = ",")) # id variable is individual_ss
 # merge jss and sss with id_ss to get the coordinates of junior and senior high schools
 js <- jss %>% select(-X)
@@ -136,6 +136,33 @@ distance <- left_join(id_ss, js, by = "jssdistrict") %>%
 
 ## Exercise 4   Descriptive Characteristics
 ```{r}
+# get cutoff and quality from exercise 2
+stu6 <- left_join(stu4, admin, by = "choice_sp") %>% 
+  select(choice_sp, schoolcode, sssdistrict:size, rankplace) %>%
+  filter(!is.na(rankplace)) %>% # add rankplace as the id variable to stu5 in exercise 2
+  filter(rankplace < 7) %>% 
+  distinct() 
 
+cutoff <- stu6 %>%
+  select(choice_sp,cutoff, rankplace) %>% 
+  group_by(rankplace) %>%
+  #spread(., choice_sp, cutoff) %>%
+  summarise(mean_cutoff = mean(cutoff), sd_cutoff = sd(cutoff))
+
+quality <- stu6 %>%
+  select(choice_sp, quality, rankplace) %>%
+  group_by(rankplace) %>%
+  summarise(mean_quality = mean(quality), sd_quality = sd(quality))
+
+# get distance from exercise 3
+dist <- distance %>%
+  select(id, dist_sss_jss, rankplace) %>%
+  filter(!is.na(rankplace) & !is.na(dist_sss_jss)) %>% # drop NAs in distance and rankplacce
+  filter(rankplace < 7) %>% 
+  group_by(rankplace) %>%
+  summarise(mean_distance = mean(dist_sss_jss), sd_distance = sd(dist_sss_jss))
+                
+avg_sd <- left_join(cutoff, quality, by = 'rankplace') %>%
+  left_join(., dist, by = 'rankplace')
 ```
 
