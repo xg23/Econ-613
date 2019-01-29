@@ -13,6 +13,7 @@ library(magrittr)
 library(tidyr)
 library(tibble)
 library(stringr)
+library(reshape2)
 
 # Read data
 jss <- read.csv("datjss.csv", header=T, sep=",")
@@ -44,10 +45,29 @@ pgm <- stu %>%
 
 * Number of choices (school, program): 
 ```{r}
-stu1 <- stu %>%
-  subset(., is.na(.[5:16]))
- #  drop_na(., schoolcode1:choicepgm6) # tease out NAs in shool and program choices
+school <- stu %>%
+  select(X:schoolcode6) %>%
+  gather(key = 'school', 'schoolcode', -c(X:male)) %>%
+  mutate(choice = str_match(school, "[1-6]") %>% as.numeric())
 
+pgm <- stu %>% 
+  select(X, choicepgm1:rankplace) %>%
+  gather(key = 'program', 'choicepgm', -c(X, jssdistrict, rankplace))   %>%
+    mutate(choice = str_match(program, "[1-6]") %>% as.numeric())
+
+stu1 <- left_join(school, pgm, by = c("X", "choice")) %>%
+  mutate(choice = paste(stu1$schoolcode, stu1$choicepgm, sep = ","))
+
+
+  gather(key = 'program', value = 'choicepgm', -c(X:male, jssdistrict:schoolcode)) %>%
+# reshape the dataframe by converting school and program choices from wide to long. 
+  filter(!is.na(schoolcode) & !is.na(choicepgm))
+
+
+map(stu1, function(x) c(paste(stu1[x, 4 + stu1$rankplace[[i]]], stu1[x, 10 + stu1$rankplace[[i]]])))
+
+ #  drop_na(., schoolcode1:choicepgm6) # tease out NAs in shool and program choices
+stu_c[cbind(seq_along(stu4$rankplace), stu4$rankplace +4))]
 
 #  map(., function(x) gsub("^$|^ $", NA, x)) # replace all empty cells with NAs. 
 ```
@@ -85,19 +105,46 @@ stu3 <- drop_na(stu, starts_with("choice"))
 # drop students that are not get enrolled in any school-pgm.
 stu4 <- stu %>% 
   filter(!is.na(rankplace)) %>% # drop NAs in rankplace
-  filter(rankplace < 7) %>%     # drop 99s in rankplace
-  mutate(schpgm <- )
-
-paste(stu4$schoolcode1, stu4$choicepgm1, sep = ",", collapse = NULL)
+  filter(rankplace < 7) %>%   # drop 99s in rankplace
+  mutate(admt = )
 
 
-
-map(., )
-stu4$rankplace[[i]]
+apply(stu4, 1, function(x) paste(stu4[,(4 + as.integer(stu4$rankplace[[x]]))], 
+                                 stu4[,(10 + as.integer(stu4$rankplace[[x]]))], 
+                                 sep = ",", collapse = NULL))
 
 
 
 
+
+map(t1, function(x) paste(t1[x, 4 + t1$rankplace[[i]]], t1[x, 10 + t1$rankplace[[i]]]))
+
+
+paste(t1[1,4+5], t1[1,10+5])
+paste(t1[2,4+2], t1[2,10+2])
+paste(t1[3,4+4], t1[3,10+4])
+
+paste(t1[2, 4+t1$rankplace[[2]]], t1[2, 10+t1$rankplace[[2]]])
+
+stu4$schoolcode
+
+spchoice_1
+spchoice_2
+
+admit = spchoice_[i], i = rankplace
+
+t1$rankplace[1]
+
+t1[1,9]
 ```
 
+
+
+## Excercise 3 Distance
+```{r}
+distance <- stu %>%
+  select(X, schoolcode1:schoolcode6, jssdistrict)
+
+dis <- left_join(distance, jss, by)
+```
 
