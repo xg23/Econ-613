@@ -31,6 +31,14 @@ length(unique(stu$X))
 * Number of schools: 898
 ```{r}
 length(unique(sss$schoolcode))
+# clean sss
+ss <- sss %>% 
+  select(-X) %>%
+  mutate(schoolname = str_remove_all(schoolname, "\\d")) %>% # clean school names
+  mutate(schoolname = str_remove_all(schoolname, "\\W")) %>%
+  distinct(schoolcode, .keep_all = T) # Note that some school names do not match their school code,
+# we will only use school codes as id variable. 
+length(unique(ss$schoolcode))
 ```
 
 * Number of programs: 32
@@ -93,35 +101,26 @@ stu3 <- drop_na(stu, starts_with("choice"))
 
 
 ## Excercise 2
+The school level dataset is presented by 'stu5'
 ```{r}
 df <- stu1 %>%
-  select(X, choice_sp, schoolcode, score)
+  select(X, choice_sp, schoolcode, score, rankplace)
 
-ss <- sss %>% 
-  select(-X) %>%
-  mutate(schoolname = str_remove_all(ss$schoolname, "\\d")) %>% # remove all school names start with schoolcode
-  mutate(schoolname = str_remove_all(ss$schoolname, "\\W")) %>%
-  distinct() 
+# merge ss with df, 
+stu4 <- left_join(df, ss, by = "schoolcode") 
 
-ss %>% drop_na()
+admin <- stu4 %>%  
+  filter(!is.na(rankplace)) %>% 
+  filter(rankplace < 7) %>%  # get a subset of admitted students
+  group_by(choice_sp) %>%
+  summarise(cutoff = min(score), quality = mean(score), size = n())
 
+stu5 <- left_join(stu4, admin, by = "choice_sp") %>%
+  select(choice_sp, sssdistrict:size) %>%
+  distinct()
 
-  str_detect(ss$schoolname[3075:3090],"\\W")
-  
-
-
-
-
-
-stu4 <- left_join(df, ss, by = "schoolcode")
-
-# drop students that are not get enrolled in any school-pgm.
-stu4 <- stu %>% 
-  filter(!is.na(rankplace)) %>% # drop NAs in rankplace
-  filter(rankplace < 7) #%>%   # drop 99s in rankplace
-
-#map(t1, function(x) paste(t1[x, 4 + t1$rankplace[[i]]], t1[x, 10 + t1$rankplace[[i]]]))
-
+# the dataset
+stu5
 ```
 
 
