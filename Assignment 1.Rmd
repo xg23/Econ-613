@@ -36,8 +36,8 @@ ss <- sss %>%
   select(-X) %>%
   mutate(schoolname = str_remove_all(schoolname, "\\d")) %>% # clean school names
   mutate(schoolname = str_remove_all(schoolname, "\\W")) %>%
-  distinct(schoolcode, .keep_all = T) # Note that some school names do not match their school code,
-# we will only use school codes as id variable. 
+  distinct(schoolcode, .keep_all = T) # Note that some school names do not match their 
+# school code, I will only use school codes as id variable. 
 length(unique(ss$schoolcode))
 ```
 
@@ -49,8 +49,9 @@ pgm <- stu %>%
   unlist %>% 
   unique() %>%  # join all the unique programs in 6 choices and find the unique value.
   length() 
-# Note that there's NA in choicepgm, so the number of programs is: 33 - 1 = 32
+pgm
 ```
+Note that there's NAs in choicepgm, so the number of programs is: 33 - 1 = 32
 
 * Number of choices (school, program): 
 ```{r message=FALSE, warning=FALSE}
@@ -67,10 +68,8 @@ pgm <- stu %>%
 stu1 <- left_join(school, pgm, by = c("X", "choice")) %>%
    drop_na(., c(schoolcode,choicepgm)) %>%
    mutate(choice_sp = paste(schoolcode, choicepgm, sep = ","))
-
 # number of all choices of school and program:
 length(stu1$choice_sp)
-
 # number of unique choices of school and program
 length(unique(stu1$choice_sp))
 ```
@@ -82,7 +81,6 @@ length(unique(stu1$choice_sp))
 stu2 <- stu1 %>%
   group_by(schoolcode) %>%
   summarise(count= n())
-
 # The table presents the number of students apply to the same school (dif programs)
 stu2
 ```
@@ -92,16 +90,14 @@ stu2
 ```{r}
 # rule out NAs in choicepgm, leaving us students who apply 6 choices
 stu3 <- drop_na(stu, starts_with("choice"))
-
-# then students who apply less than 6 choices should be total number of students minus those who apply 6 choices:
+# then students who apply less than 6 choices should be total number of students minus 
+# those who apply 6 choices:
 340823 - count(stu3)
-
-# na.omit(stu[11:16])
 ```
 
 
 ## Excercise 2
-The school level dataset is presented by 'stu5'
+*stu5* is the school level dataset.
 ```{r}
 df <- stu1 %>%
   select(X, choice_sp, schoolcode, score, rankplace)
@@ -117,10 +113,7 @@ admin <- stu4 %>%
 
 stu5 <- left_join(stu4, admin, by = "choice_sp") %>%
   select(choice_sp, sssdistrict:size) %>%
-  distinct()
-
-# the dataset
-stu5
+  distinct() 
 ```
 
 
