@@ -19,7 +19,7 @@ library(reshape2)
 jss <- read.csv("datjss.csv", header=T, sep=",")
 sss <- read.csv("datsss.csv", header=T, sep=",")
 stu <- read.csv("datstu.csv", header=T, sep=",", na.strings=c(""," ","NA"))
-# Note that there are empty cells in stu, we replace them with NAs first.
+# Note that there are empty cells in stu, replace them with NAs first.
 ```
 
 ## Exercise 1
@@ -51,7 +51,7 @@ pgm <- stu %>%
   length() 
 pgm
 ```
-Note that there's NAs in choicepgm, so the number of programs is: 33 - 1 = 32
+Note that there are NAs in choicepgm, so the number of programs is: 33 - 1 = 32
 
 * Number of choices (school, program): 
 ```{r message=FALSE, warning=FALSE}
@@ -67,7 +67,8 @@ pgm <- stu %>%
 
 stu1 <- left_join(school, pgm, by = c("X", "choice")) %>%
    drop_na(., c(schoolcode,choicepgm)) %>%
-   mutate(choice_sp = paste(schoolcode, choicepgm, sep = ","))
+   mutate(choice_sp = paste(schoolcode, choicepgm, sep = ",")) # id var is choice of school_pgm
+
 # number of all choices of school and program:
 length(stu1$choice_sp)
 # number of unique choices of school and program
@@ -86,7 +87,6 @@ stu2
 ```
 
 * Apply to less than 6 choices: 20988
-
 ```{r}
 # rule out NAs in choicepgm, leaving us students who apply 6 choices
 stu3 <- drop_na(stu, starts_with("choice"))
@@ -96,8 +96,8 @@ stu3 <- drop_na(stu, starts_with("choice"))
 ```
 
 
-## Excercise 2
-*stu5* is the school level dataset.
+## Excercise 2   Data
+The school level dataset is given by *stu5*
 ```{r}
 df <- stu1 %>%
   select(X, choice_sp, schoolcode, score, rankplace)
@@ -116,11 +116,26 @@ stu5 <- left_join(stu4, admin, by = "choice_sp") %>%
   distinct() 
 ```
 
+## Excercise 3   Distance
+The distance between junior high school and senior high school is given by the variable *dis_sss_jsss* in dataset *distance*. 
+```{r message=FALSE, warning=FALSE}
+# create an individual level dataset where each row is a pair of individual and school choice
+id_ss <- stu %>%
+  select(X, schoolcode1:schoolcode6, jssdistrict) %>%
+  gather(key = 'seniorhigh', 'schoolcode', -X, -jssdistrict) %>%
+  mutate(id = paste(X, schoolcode, sep = ",")) # id variable is individual_ss
+# merge jss and sss with id_ss to get the coordinates of junior and senior high schools
+js <- jss %>% select(-X)
+colnames(js)[2:3] <- c("jsslong", "jsslat")
 
+distance <- left_join(id_ss, js, by = "jssdistrict") %>%
+  left_join(., ss, by = "schoolcode") %>%
+  mutate(dist_sss_jss = sqrt((69.172*(ssslong - jsslong)*cos(jsslat/57.3))^2 
+                             + (69.172*(ssslat - jsslat))^2)) # calculate distance using the formula
+```
 
-## Excercise 3 Distance
+## Exercise 4   Descriptive Characteristics
 ```{r}
-distance <- stu %>%
-  select(X, schoolcode1:schoolcode6, jssdistrict)
+
 ```
 
