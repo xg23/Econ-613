@@ -14,7 +14,6 @@ library(tidyr)
 library(tibble)
 library(stringr)
 library(reshape2)
-
 # Read data
 jss <- read.csv("datjss.csv", header=T, sep=",")
 sss <- read.csv("datsss.csv", header=T, sep=",")
@@ -121,8 +120,8 @@ The distance between junior high school and senior high school is given by the v
 ```{r message=FALSE, warning=FALSE}
 # create an individual level dataset where each row is a pair of individual and school choice
 id_ss <- stu %>%
-  select(X, schoolcode1:schoolcode6, jssdistrict, rankplace) %>%
-  gather(key = 'seniorhigh', 'schoolcode', -X, -jssdistrict, -rankplace) %>%
+  select(X, schoolcode1:schoolcode6, jssdistrict, rankplace, score) %>%
+  gather(key = 'seniorhigh', 'schoolcode', -X, -jssdistrict, -rankplace, -score) %>%
   mutate(id = paste(X, schoolcode, sep = ",")) # id variable is individual_ss
 # merge jss and sss with id_ss to get the coordinates of junior and senior high schools
 js <- jss %>% select(-X)
@@ -135,19 +134,20 @@ distance <- left_join(id_ss, js, by = "jssdistrict") %>%
 ```
 
 ## Exercise 4   Descriptive Characteristics
+*avg_sd* is the table for average and sd of cutoff, quality and distance by ranked choice. *avg_sd_quantile* 
 ```{r}
 # get cutoff and quality from exercise 2
 stu6 <- left_join(stu4, admin, by = "choice_sp") %>% 
-  select(choice_sp, schoolcode, sssdistrict:size, rankplace) %>%
+  select(choice_sp, schoolcode, sssdistrict:size, rankplace, score) %>%
   filter(!is.na(rankplace)) %>% # add rankplace as the id variable to stu5 in exercise 2
   filter(rankplace < 7) %>% 
   distinct() 
 
 cutoff <- stu6 %>%
-  select(choice_sp,cutoff, rankplace) %>% 
+  select(choice_sp, cutoff, rankplace) %>% 
   group_by(rankplace) %>%
   #spread(., choice_sp, cutoff) %>%
-  summarise(mean_cutoff = mean(cutoff), sd_cutoff = sd(cutoff))
+  summarise(mean_cutoff = mean(cutoff), sd_cutoff = sd(cutoff)) 
 
 quality <- stu6 %>%
   select(choice_sp, quality, rankplace) %>%
@@ -161,8 +161,84 @@ dist <- distance %>%
   filter(rankplace < 7) %>% 
   group_by(rankplace) %>%
   summarise(mean_distance = mean(dist_sss_jss), sd_distance = sd(dist_sss_jss))
-                
+
 avg_sd <- left_join(cutoff, quality, by = 'rankplace') %>%
   left_join(., dist, by = 'rankplace')
+
+# divide the whole sample into 4 subsamples by score quantiles. 
+stu7 <- stu6 %>%
+  filter(!is.na(score)) %>%
+  mutate(quantile = ntile(score, 4))
+
+cutoff_q <- stu7 %>%
+  select(choice_sp,cutoff, quantile, rankplace) %>% 
+  group_by(quantile, rankplace) %>%
+  summarise(mean_cutoff = mean(cutoff), sd_cutoff = sd(cutoff))
+
+# cutoff <- cutoff %>%  gather(variable, value, -(rankplace:quantile)) %>% 
+#           unite(temp, rankplace, variable) %>% spread(temp, value)
+
+quality_q <- stu7 %>%
+  select(choice_sp, quality, rankplace, quantile) %>% 
+  group_by(quantile, rankplace) %>%
+  summarise(mean_cutoff = mean(quality), sd_cutoff = sd(quality))
+
+dist_q <- distance %>%
+  filter(!is.na(score)) %>%
+  mutate(quantile = ntile(score, 4)) %>%
+  select(id, dist_sss_jss, rankplace, quantile) %>%
+  filter(!is.na(rankplace) & !is.na(dist_sss_jss)) %>% # drop NAs in distance and rankplacce
+  filter(rankplace < 7) %>% 
+  group_by(quantile, rankplace) %>%
+  summarise(mean_distance = mean(dist_sss_jss), sd_distance = sd(dist_sss_jss))
+
+avg_sd_quantile <- left_join(cutoff_q, quality_q, dist_q, by = c("quantile", "rankplace")) %>%
+  left_join(., dist_q, by = c("quantile","rankplace"))
+```
+
+## Excercise 5
+*stu9* groups schools by decile of selectivity. **num_group** in *group_school* presents the number of groups in each invidual's application.
+```{r}
+ stu8 <- stu %>%
+  select(X:schoolcode6, rankplace) %>%
+  gather(key = 'school', 'schoolcode', -c(X:male, rankplace)) %>%
+  mutate(choice = str_match(school, "[1-6]") %>% as.numeric()) %>%
+  filter(!is.na(rankplace) & !is.na(score)) %>% 
+  filter(rankplace < 7) 
+
+stu9 <- stu8 %>% 
+  group_by(schoolcode) %>%
+  summarise(cutoff = min(score)) %>%
+  inner_join(stu8, by = 'schoolcode') %>%
+  mutate(decile = ntile(cutoff, 10)) %>% # decile of cutoffs
+  group_by(decile) # group schools by decile of cutoffs.
+
+group_school <- stu9 %>% 
+   select(X, school, decile) %>%
+   spread(school, decile) %>% 
+   mutate(num_group = apply(., 1, function(x) length(unique(x))-1))# Note that X also constitutes
+  # a unqiue number-- minus one to get the number of groups in the application.
+```
+
+Redo this part by student test score quantiles:
+```{r}
+stu10 <- stu %>%
+  filter(!is.na(score)) %>%
+  mutate(quantile = ntile(score, 4)) %>%
+  select(X:schoolcode6, rankplace, quantile) %>%
+  gather(key = 'school', 'schoolcode', -c(X:male, rankplace, quantile)) %>%
+  mutate(choice = str_match(school, "[1-6]") %>% as.numeric()) %>%
+  filter(!is.na(rankplace) & !is.na(score)& rankplace < 7) %>% 
+  group_by(quantile, schoolcode) %>%
+  summarise(cutoff = min(score)) %>%
+  inner_join(stu8, by = 'schoolcode') %>%
+  mutate(decile = ntile(cutoff, 10)) %>% # decile of cutoffs
+  group_by(decile)
+
+group_school_d <- stu10 %>% 
+  select(X, school, decile, quantile) %>%
+  spread(school, decile) %>% 
+  mutate(num_group = apply(., 1, function(x) length(unique(x))-1)) %>%
+  group_by(quantile)
 ```
 
