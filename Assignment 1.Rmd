@@ -4,7 +4,7 @@ author: "Xiaoshu Gui"
 date: "1/24/2019"
 output: pdf_document
 ---
-
+## Set up
 ```{r message=FALSE, warning=FALSE}
 # Load packages
 library(dplyr)
@@ -17,8 +17,33 @@ library(reshape2)
 # Read data
 jss <- read.csv("datjss.csv", header=T, sep=",")
 sss <- read.csv("datsss.csv", header=T, sep=",")
-stu <- read.csv("datstu.csv", header=T, sep=",", na.strings=c(""," ","NA"))
+stu <- read.csv("datstu.csv", header=T, sep=",", na.strings=c(""," ","NA")) 
 # Note that there are empty cells in stu, replace them with NAs first.
+
+# clean datsss
+ss <- sss %>% 
+  select(-X) %>%
+  mutate(schoolname = str_remove_all(schoolname, "\\d")) %>% # clean school names
+  mutate(schoolname = str_remove_all(schoolname, "\\W")) %>%
+  distinct(schoolcode, .keep_all = T) # Note that some school names do not match their 
+# school code, I will only use school codes as id variable. 
+
+# Clean datstu
+school <- stu %>% # reshape school choices from wide to long
+  select(X:schoolcode6) %>% 
+  gather(key = 'school', 'schoolcode', -c(X:male)) %>% 
+  mutate(choice = str_match(school, "[1-6]") %>% as.numeric())
+
+pgm <- stu %>%  # reshape program choices from wide to long
+  select(X, choicepgm1:rankplace) %>% 
+  gather(key = 'program', 'choicepgm', -c(X, jssdistrict, rankplace)) %>% 
+  mutate(choice = str_match(program, "[1-6]") %>% as.numeric())
+
+# Create a school_program level dataframe: df_schpgm
+df_schpgm <- left_join(school, pgm, by = c("X", "choice")) %>%
+   mutate(choice_sp = paste(schoolcode, choicepgm, sep = ",")) # id var is choice of school_pgm
+
+# Create a school_individual level dataframe: df_ss
 ```
 
 ## Exercise 1
@@ -26,74 +51,49 @@ stu <- read.csv("datstu.csv", header=T, sep=",", na.strings=c(""," ","NA"))
 ```{r}
 length(unique(stu$X))
 ```
-
 * Number of schools: 898
 ```{r}
-length(unique(sss$schoolcode))
-# clean sss
-ss <- sss %>% 
-  select(-X) %>%
-  mutate(schoolname = str_remove_all(schoolname, "\\d")) %>% # clean school names
-  mutate(schoolname = str_remove_all(schoolname, "\\W")) %>%
-  distinct(schoolcode, .keep_all = T) # Note that some school names do not match their 
-# school code, I will only use school codes as id variable. 
-length(unique(ss$schoolcode))
+length(unique(sss$schoolcode))   # or length(unique(ss$schoolcode))
 ```
 
 * Number of programs: 32
 ```{r}
-pgm <- stu %>% 
-  select(starts_with("choice")) %>% # get a subset of stu (choicepgm1 ~ 6)
-  map(., function(x) unique(x)) %>% # find the number of programs in each "choicepgm"
-  unlist %>% 
-  unique() %>%  # join all the unique programs in 6 choices and find the unique value.
-  length() 
-pgm
+length(unique(pgm$choicepgm))
 ```
-Note that there are NAs in choicepgm, so the number of programs is: 33 - 1 = 32
+Note that there's NA in unique choicepgms, so the number of programs is: 33 - 1 = 32
 
 * Number of choices (school, program): 
 ```{r message=FALSE, warning=FALSE}
-school <- stu %>%
-  select(X:schoolcode6) %>%
-  gather(key = 'school', 'schoolcode', -c(X:male)) %>%
-  mutate(choice = str_match(school, "[1-6]") %>% as.numeric())
+# drop NAs in school and program choices
+stu1 <- df_schpgm %>%
+  drop_na(., c(schoolcode,choicepgm))
 
-pgm <- stu %>% 
-  select(X, choicepgm1:rankplace) %>%
-  gather(key = 'program', 'choicepgm', -c(X, jssdistrict, rankplace))   %>%
-    mutate(choice = str_match(program, "[1-6]") %>% as.numeric())
-
-stu1 <- left_join(school, pgm, by = c("X", "choice")) %>%
-   drop_na(., c(schoolcode,choicepgm)) %>%
-   mutate(choice_sp = paste(schoolcode, choicepgm, sep = ",")) # id var is choice of school_pgm
-
-# number of all choices of school and program:
-length(stu1$choice_sp)
-# number of unique choices of school and program
-length(unique(stu1$choice_sp))
+length(stu1$choice_sp) # number of all choices of school and program
+length(unique(stu1$choice_sp)) # number of unique choices of school and program
 ```
 
 * Missing test score: 179887 (number of NAs in "score" in datstu)
+```{r}
+summary(stu$score)
+```
 
 * Apply to the same school (different programs)
+*stu2* presents the number of students apply to the same school.
 ```{r}
-stu2 <- stu1 %>%
+stu2 <- school %>%
+  drop_na(schoolcode) %>%
   group_by(schoolcode) %>%
   summarise(count= n())
-# The table presents the number of students apply to the same school (dif programs)
-stu2
 ```
 
 * Apply to less than 6 choices: 20988
 ```{r}
 # rule out NAs in choicepgm, leaving us students who apply 6 choices
 stu3 <- drop_na(stu, starts_with("choice"))
-# then students who apply less than 6 choices should be total number of students minus 
-# those who apply 6 choices:
+# Then the number of students who apply less than 6 choices should be 
+# total number of students minus those who apply 6 choices:
 340823 - count(stu3)
 ```
-
 
 ## Excercise 2   Data
 The school level dataset is given by *stu5*
@@ -101,8 +101,7 @@ The school level dataset is given by *stu5*
 df <- stu1 %>%
   select(X, choice_sp, schoolcode, score, rankplace)
 
-# merge ss with df, 
-stu4 <- left_join(df, ss, by = "schoolcode") 
+stu4 <- left_join(df, ss, by = "schoolcode") # merge ss with df
 
 admin <- stu4 %>%  
   filter(!is.na(rankplace)) %>% 
@@ -112,7 +111,7 @@ admin <- stu4 %>%
 
 stu5 <- left_join(stu4, admin, by = "choice_sp") %>%
   select(choice_sp, sssdistrict:size) %>%
-  distinct() 
+  distinct()
 ```
 
 ## Excercise 3   Distance
@@ -123,6 +122,7 @@ id_ss <- stu %>%
   select(X, schoolcode1:schoolcode6, jssdistrict, rankplace, score) %>%
   gather(key = 'seniorhigh', 'schoolcode', -X, -jssdistrict, -rankplace, -score) %>%
   mutate(id = paste(X, schoolcode, sep = ",")) # id variable is individual_ss
+
 # merge jss and sss with id_ss to get the coordinates of junior and senior high schools
 js <- jss %>% select(-X)
 colnames(js)[2:3] <- c("jsslong", "jsslat")
@@ -137,7 +137,9 @@ distance <- left_join(id_ss, js, by = "jssdistrict") %>%
 *avg_sd* is the table for average and sd of cutoff, quality and distance by ranked choice. *avg_sd_quantile* 
 ```{r}
 # get cutoff and quality from exercise 2
-stu6 <- left_join(stu4, admin, by = "choice_sp") %>% 
+stu6 <- stu %>%
+  
+  left_join(stu4, admin, by = "choice_sp") %>% 
   select(choice_sp, schoolcode, sssdistrict:size, rankplace, score) %>%
   filter(!is.na(rankplace)) %>% # add rankplace as the id variable to stu5 in exercise 2
   filter(rankplace < 7) %>% 
@@ -174,9 +176,6 @@ cutoff_q <- stu7 %>%
   select(choice_sp,cutoff, quantile, rankplace) %>% 
   group_by(quantile, rankplace) %>%
   summarise(mean_cutoff = mean(cutoff), sd_cutoff = sd(cutoff))
-
-# cutoff <- cutoff %>%  gather(variable, value, -(rankplace:quantile)) %>% 
-#           unite(temp, rankplace, variable) %>% spread(temp, value)
 
 quality_q <- stu7 %>%
   select(choice_sp, quality, rankplace, quantile) %>% 
