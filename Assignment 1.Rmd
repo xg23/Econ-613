@@ -4,7 +4,7 @@ author: "Xiaoshu Gui"
 date: "1/24/2019"
 output: pdf_document
 ---
-## Set up
+## Setup
 ```{r message=FALSE, warning=FALSE}
 # Load packages
 library(dplyr)
@@ -20,6 +20,22 @@ sss <- read.csv("datsss.csv", header=T, sep=",")
 stu <- read.csv("datstu.csv", header=T, sep=",", na.strings=c(""," ","NA")) 
 # Note that there are empty cells in stu, replace them with NAs first.
 
+# Reshape school choices from wide to long.
+school <- stu %>% 
+  select(X:schoolcode6, rankplace) %>% 
+  gather(key = 'school', 'schoolcode', -c(X:male, rankplace)) %>% 
+  mutate(choice = str_match(school, "[1-6]") %>% as.numeric())
+
+# Reshape program choices from wide to long 
+pgm <- stu %>%  
+  select(X, choicepgm1:rankplace) %>% 
+  gather(key = 'program', 'choicepgm', -c(X, jssdistrict, rankplace)) %>% 
+  mutate(choice = str_match(program, "[1-6]") %>% as.numeric())
+
+# Create a school_program level dataframe: df_schpgm
+df_schpgm <- left_join(school, pgm, by = c("X", "choice", "rankplace")) %>%
+   mutate(choice_sp = paste(schoolcode, choicepgm, sep = ",")) # id var is choice of school_pgm
+
 # clean datsss
 ss <- sss %>% 
   select(-X) %>%
@@ -27,23 +43,6 @@ ss <- sss %>%
   mutate(schoolname = str_remove_all(schoolname, "\\W")) %>%
   distinct(schoolcode, .keep_all = T) # Note that some school names do not match their 
 # school code, I will only use school codes as id variable. 
-
-# Clean datstu
-school <- stu %>% # reshape school choices from wide to long
-  select(X:schoolcode6) %>% 
-  gather(key = 'school', 'schoolcode', -c(X:male)) %>% 
-  mutate(choice = str_match(school, "[1-6]") %>% as.numeric())
-
-pgm <- stu %>%  # reshape program choices from wide to long
-  select(X, choicepgm1:rankplace) %>% 
-  gather(key = 'program', 'choicepgm', -c(X, jssdistrict, rankplace)) %>% 
-  mutate(choice = str_match(program, "[1-6]") %>% as.numeric())
-
-# Create a school_program level dataframe: df_schpgm
-df_schpgm <- left_join(school, pgm, by = c("X", "choice")) %>%
-   mutate(choice_sp = paste(schoolcode, choicepgm, sep = ",")) # id var is choice of school_pgm
-
-# Create a school_individual level dataframe: df_ss
 ```
 
 ## Exercise 1
@@ -77,8 +76,7 @@ length(unique(stu1$choice_sp)) # number of unique choices of school and program
 summary(stu$score)
 ```
 
-* Apply to the same school (different programs)
-*stu2* presents the number of students apply to the same school.
+* Apply to the same school (different programs): *stu2* shows the number of students apply to the same school.
 ```{r}
 stu2 <- school %>%
   drop_na(schoolcode) %>%
@@ -134,15 +132,12 @@ distance <- left_join(id_ss, js, by = "jssdistrict") %>%
 ```
 
 ## Exercise 4   Descriptive Characteristics
-*avg_sd* is the table for average and sd of cutoff, quality and distance by ranked choice. *avg_sd_quantile* 
+*avg_sd* is the table for average and sd of cutoff, quality and distance by ranked choice.
 ```{r}
 # get cutoff and quality from exercise 2
-stu6 <- stu %>%
-  
-  left_join(stu4, admin, by = "choice_sp") %>% 
+stu6 <- left_join(stu4, admin, by = "choice_sp") %>% 
   select(choice_sp, schoolcode, sssdistrict:size, rankplace, score) %>%
-  filter(!is.na(rankplace)) %>% # add rankplace as the id variable to stu5 in exercise 2
-  filter(rankplace < 7) %>% 
+  filter(!is.na(rankplace) & rankplace < 7) %>% # add rankplace as the id variable to stu5 in exercise 2
   distinct() 
 
 cutoff <- stu6 %>%
@@ -166,44 +161,42 @@ dist <- distance %>%
 
 avg_sd <- left_join(cutoff, quality, by = 'rankplace') %>%
   left_join(., dist, by = 'rankplace')
+```
 
+Redo this part, differentiating by student test score quantiles. *avg_sd_quantile* returns the result.
+```{r}
 # divide the whole sample into 4 subsamples by score quantiles. 
 stu7 <- stu6 %>%
   filter(!is.na(score)) %>%
-  mutate(quantile = ntile(score, 4))
+  mutate(quantile = ntile(score, 4)) # adding a score quantile variable
 
 cutoff_q <- stu7 %>%
-  select(choice_sp,cutoff, quantile, rankplace) %>% 
+  select(choice_sp, cutoff, quantile, rankplace) %>% 
   group_by(quantile, rankplace) %>%
   summarise(mean_cutoff = mean(cutoff), sd_cutoff = sd(cutoff))
 
 quality_q <- stu7 %>%
   select(choice_sp, quality, rankplace, quantile) %>% 
   group_by(quantile, rankplace) %>%
-  summarise(mean_cutoff = mean(quality), sd_cutoff = sd(quality))
+  summarise(mean_quality = mean(quality), sd_quality = sd(quality))
 
 dist_q <- distance %>%
   filter(!is.na(score)) %>%
   mutate(quantile = ntile(score, 4)) %>%
   select(id, dist_sss_jss, rankplace, quantile) %>%
-  filter(!is.na(rankplace) & !is.na(dist_sss_jss)) %>% # drop NAs in distance and rankplacce
-  filter(rankplace < 7) %>% 
+  filter(!is.na(rankplace) & !is.na(dist_sss_jss) & rankplace < 7) %>% 
   group_by(quantile, rankplace) %>%
   summarise(mean_distance = mean(dist_sss_jss), sd_distance = sd(dist_sss_jss))
 
-avg_sd_quantile <- left_join(cutoff_q, quality_q, dist_q, by = c("quantile", "rankplace")) %>%
+avg_sd_quantile <- left_join(cutoff_q, quality_q, by = c("quantile", "rankplace")) %>%
   left_join(., dist_q, by = c("quantile","rankplace"))
 ```
 
 ## Excercise 5
 *stu9* groups schools by decile of selectivity. **num_group** in *group_school* presents the number of groups in each invidual's application.
 ```{r}
- stu8 <- stu %>%
-  select(X:schoolcode6, rankplace) %>%
-  gather(key = 'school', 'schoolcode', -c(X:male, rankplace)) %>%
-  mutate(choice = str_match(school, "[1-6]") %>% as.numeric()) %>%
-  filter(!is.na(rankplace) & !is.na(score)) %>% 
-  filter(rankplace < 7) 
+stu8 <- school %>% 
+   filter(!is.na(rankplace) & !is.na(score) & rankplace < 7)
 
 stu9 <- stu8 %>% 
   group_by(schoolcode) %>%
@@ -227,7 +220,7 @@ stu10 <- stu %>%
   select(X:schoolcode6, rankplace, quantile) %>%
   gather(key = 'school', 'schoolcode', -c(X:male, rankplace, quantile)) %>%
   mutate(choice = str_match(school, "[1-6]") %>% as.numeric()) %>%
-  filter(!is.na(rankplace) & !is.na(score)& rankplace < 7) %>% 
+  filter(!is.na(rankplace) & !is.na(score) & rankplace < 7) %>% 
   group_by(quantile, schoolcode) %>%
   summarise(cutoff = min(score)) %>%
   inner_join(stu8, by = 'schoolcode') %>%
