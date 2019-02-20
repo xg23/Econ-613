@@ -14,6 +14,7 @@ library(tidyr)
 library(tibble)
 library(stringr)
 library(reshape2)
+library(lme4)
 ```
 
 ## Exercise 1 Data Creation
@@ -24,27 +25,81 @@ X2 <- rgamma(10000, shape = 3, scale = 2)
 X3 <- rbinom(10000, 1, 0.3)
 esp <- rnorm(10000, 2, 1)
 Y <- 0.5 + 1.2*X1 - 0.9*X2 + 0.1*X3 + esp
+X = as.matrix(cbind(1, X1, X2, X3))
 ydum <- ifelse(Y > mean(Y), 1, 0)
 ```
 
+## Exercise 3 Numerical Optimization
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+# Likelihood function:
+likelihood <- function(beta) {
+  prod(pnorm(X %*% beta)^ydum * (1 - pnorm(X %*% beta)^(1 - ydum)))
+}
+# Log likelihood funcition:
+ll <- function(beta) { 
+  sum(ydum * log(pnorm(X %*% beta)) + (1 - ydum)*log(1 - pnorm(X %*% beta)))
+} 
+# gradient:
+gradient <- function(beta) {
+  u = X %*% beta
+  Phi = pnorm(u)
+  phi = dnorm(u)
+  v = ifelse(ydum == 1, phi/Phi, -phi/(1 - Phi))
+  g = t(v) %*% X
+  g = t(g)
+  return(g)
+}
+# set up for gradient ascent
+beta_old = matrix(c(0.1, 0.1, 0.1, 0.1), nrow = 4, ncol = 1)
+L = ll(beta_old) # an array that stores log-likelihood for each iteration; first element is the initial log-likelihood
+iter = 0 # count interation
+tol = 10^(-2)
+step_size = 10^(-5) # scaling parameter
+# gradiant ascent
+while(TRUE) {
+  grad = gradient(beta_old)   # compute gradient as the direction 
+  beta_new = beta_old + grad * step_size # update
+  L = c(L, ll(beta_new))  # store results
+  diff = abs(L[length(L)] - L[length(L) - 1])
+  iter = iter + 1
+  beta_old = beta_new
+  # stopping criteria
+  if(iter == 1000){
+    message("reach max iterations")
+    break()
+  }
+  if(diff < tol){
+    message("log-likelihood has converged")
+    break()
+  }
+}
+# results
+#plot(L, type = "l")
+L[length(L)] # log-likelihood
+beta_old # coefficient
+# They are quite close to the true parameters, which are 1.2, -0.9, 0.1.
+```
+
 ## Exercise 2 OLS
-```{r}
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
 cor(Y, X1)
 cor.test(Y, X1, alt = "greater")
 t.test(Y, X1, mu = 1.2, paired = T) # because Y is a function of X1, they are dependent. 
-
 m1 <- lm(Y~ (1 + X1 + X2 + X3))
 coef(m1)
 # by hand
-X = as.matrix(cbind(1, X1, X2, X3))
 y = as.matrix(Y)
-beta = solve(t(X) %*% X) %*% t(X) %*% y # The restuls are the same with coef(m1)
-# calculate the standard error using standand fomulas from OLS:
-yhat = beta[1, ]*X[,1] + beta[2, ]*X[,2] + beta[3,] *X[,3]+ beta[4,]*X[,4]
-yhat_1 = X %*% beta
-sqrt(sum((y - yhat_1)^2)/10000)
-
-
+Beta = solve(t(X) %*% X) %*% t(X) %*% y # The restuls are the same with coef(m1)
+# calculate the standard error using standand fomulas from OLS using the varcov matrix
+k = ncol(X)
+n = nrow(X)
+# create means of each column:
+X_mean <- matrix(1, nrow = n) %*% cbind(mean(X[,1]), mean(X[,2]), mean(X[,3]), mean(X[,4]))
+# create a difference matrix:
+D <- X - X_mean
+# create the variance-covariance matrix
+C <- (n-1)^(-1) * t(D) %*% D
+se <- sqrt(diag(C))/sqrt(n)
 # using bootstrap with 49 and 499 replications
 df = data.frame(X1, X2, X3, Y)
 n = nrow(df)
@@ -64,110 +119,28 @@ apply(coef_table[1:49,], 2, sd)/sqrt(49)
 apply(coef_table, 2, sd)/sqrt(499)
 ```
 
-## Exercise 3 Numerical Optimization
-```{r message=FALSE, warning=FALSE, paged.print=FALSE}
-# Likelihood function:
-likelihood <- function(beta) {
-  prod(pnorm(X %*% beta)^ydum * (1 - pnorm(X %*% beta)^(1 - ydum)))
-}
-# Log likelihood funcition:
-ll <- function(beta) { 
-  beta = as.vector(beta)
-  sum(ydum * log(pnorm(X %*% beta)) + (1 - ydum)*log(1 - pnorm(X %*% beta)))
-} 
-# gradient:
-gradient <- function(beta) {
-  u = X %*% beta
-  F = pnorm(u)
-  f = dnorm(u)
-  v = if_else(y == 1, f/F, -f/(1-F))
-  g = t(v) %*% X
-  g = t(g)
-  return(g)
-}
-# set up for gradient ascent
-beta_old = matrix(c(0.1, 0.1, 0.1, 0.1), nrow = 4, ncol = 1)
-L = ll(beta_old) # an array that stores log-likelihood for each iteration; first element is the initial log-likelihood
-alpha = 0.000001
-tol = 10^(-6)
-
-#L = L_0
-iterations = 0
-maxIterations = 1000
-
-###
-beta = matrix(0, nrow = 4, ncol = 1000)
-d = matrix(0, nrow = 4, ncol = 1000)
-beta1 = beta0
-grad = beta0
-iterations = 0
-L0 = 0
-L1 = 0
-tol = 0.01
-diff = 10
-while (diff > tol) {
- # for (i in 2:1000) {
- #  d[i-1] <- gradient(X, ydum, beta[i-1])
-  # d[i-1] <- t(d[i-1])
-   # beta[i] <- as.vector(beta[i-1] - alpha*d[i-1]) # ascent + descent - ?
-    #L[i] <- ll(beta[i])
-  #}
-  grad <- gradient(X, ydum, beta0)
-  beta1 <- beta0 + alpha*grad
-  L1 = ll(beta1)
-  diff = abs(L1 - L0)
-  beta0 = beta1
-  L0 = L1
-  iterations = iterations + 1
-# if the value of likihood changes is less than the tolerance, we reach the maximum likelihood
-  #if (diff > tol) {
-   # return(L)
-  #  stop()
-  #}
-# simultaneous update
-  #beta[i-1] = beta[i]
-# stop the loop when the number of iteratons reaches to maxIteration
-   # if (iterations > maxIterations) {
-  #  print("Too many interations.")
-    #stop()
-  # }
-}
-  
-###
-while(diff > tol) {
-  d = gradient(X, ydum, beta_0)
-  beta_1 = beta_0 + alpha * d
-  
-  L_1 = ll(beta_1)
-  L = c(L, L_1)
-  diff = abs(L_1 - L_0)
-  L_0 = L_1
-  beta_0 = as.vector(beta_1)
-}
-```
-
 ## Exercise 4
+The log likelihood functions of probit, logit and linear prbability model are the same, dispite different function F(x). The probit model specifies cdf function, the logit model specifies the logistic funtion and the linear probability model specifies a linear function ($\beta$X). 
 ```{r}
 # probit model
-ll_prob <- function(beta) { 
-  beta = as.vector(beta)
-  sum(ydum * log(pnorm(X %*% beta)) + (1 - ydum)*log(1 - pnorm(X %*% beta)))/10000
+prob_lik <- function(beta) {  # likelihood 
+  logl <- sum(ydum* log(pnorm(X %*% beta)) + (1 - ydum)* log(1 - pnorm(X %*% beta)))
+  return(-logl)
 } 
 
 
+# the gradiant function is the same in ex.3
+
 # logit model
-ll_logit <- function(beta) {
-  beta = as.vector(beta)
-  sum(ydum*(log(1 + e^(X %*% beta))^(-1)) + (1 -ydum)*log(1 - (1 + e^(X %*% beta))^(-1)))
+logit_lik <- function(beta) {  # likelihood
+  logl <- sum(ydum*(log(1 + e^(X %*% beta))^(-1)) + (1 -ydum)*log(1 - (1 + e^(X %*% beta))^(-1)))
+  return(-logl)
 }
 
 # linear probability model
-var_lpm <- function(beta) {
-  beta = as.vector(beta)
-  X %*% beta (1 - X %*% beta)
+ll_lm <- function(beta) {
+  sum(ydum*(log(X %*% beta) + (1 - ydum)*log(1 - X %*% beta)))
 }
-
-
 
 ## compare with glm and lm estimtaes
 m2 <- glm(ydum ~ X, family = binomial(link = "probit"))
@@ -178,25 +151,13 @@ m3$coefficients
 
 m4 <- lm(ydum ~ X)
 m4$coefficients
-
-
-
-
-while (TRUE) {
-  if (meet_pretty = TRUE) {
-    print("WuFan is happy")
-  }
-  if (meet_pretty = FALSE) {
-    mod(busy) <- work(exp(-(duedate - today)))
-    mod(~busy) <- if_else(boring, unhappy, peaceful, na.rm = T) 
-  }
-}
-
 ```
 
 
 ## Exercise 5
 ```{r}
+
+
 
 ```
 
