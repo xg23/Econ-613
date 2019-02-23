@@ -3,10 +3,8 @@ title: "Assignment 2"
 author: "Xiaoshu Gui"
 output: pdf_document
 ---
-
 ## Setup
 ```{r message=FALSE, warning=FALSE}
-# Load packages
 library(dplyr)
 library(purrr)
 library(magrittr)
@@ -15,8 +13,8 @@ library(tibble)
 library(stringr)
 library(reshape2)
 library(lme4)
+library(mfx)
 ```
-
 ## Exercise 1 Data Creation
 ```{r}
 set.seed(12345)
@@ -28,7 +26,6 @@ Y <- 0.5 + 1.2*X1 - 0.9*X2 + 0.1*X3 + esp
 X = as.matrix(cbind(1, X1, X2, X3))
 ydum <- ifelse(Y > mean(Y), 1, 0)
 ```
-
 ## Exercise 3 Numerical Optimization
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE}
 # Likelihood function:
@@ -51,7 +48,7 @@ gradient <- function(beta) {
 }
 # set up for gradient ascent
 beta_old = matrix(c(0.1, 0.1, 0.1, 0.1), nrow = 4, ncol = 1)
-L = ll(beta_old) # an array that stores log-likelihood for each iteration; first element is the initial log-likelihood
+L = ll(beta_old) # an array that stores log-likelihood for each iteration
 iter = 0 # count interation
 tol = 10^(-2)
 step_size = 10^(-5) # scaling parameter
@@ -73,33 +70,39 @@ while(TRUE) {
     break()
   }
 }
-# results
-#plot(L, type = "l")
-L[length(L)] # log-likelihood
+#L[length(L)] # log-likelihood
 beta_old # coefficient
-# They are quite close to the true parameters, which are 1.2, -0.9, 0.1.
+# They are quite close to the true parameters, which are 1.2, -0.9, 0.1. 
 ```
-
 ## Exercise 2 OLS
-```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+1. The correlation between Y and X1 is given by *corr*, which is quite far away from 1.2 (Correlation should take a value between -1 and 1 though, not sure if it meant be a 0.2 instead of 1.2 in the question...).
+```{r}
 cor(Y, X1)
-cor.test(Y, X1, alt = "greater")
-t.test(Y, X1, mu = 1.2, paired = T) # because Y is a function of X1, they are dependent. 
+# calculate correlation by hand:
+corr <- sum((X1 - mean(X1))*(Y - mean(Y)))/(sd(X1)*sd(Y)*(10000-1)) 
+print(corr)
+```
+2. Calculate the coefficients of the regression of Y on X, where X = (1, X1, X2, X3)
+```{r}
 m1 <- lm(Y~ (1 + X1 + X2 + X3))
 coef(m1)
 # by hand
+X = as.matrix(X)
 y = as.matrix(Y)
-Beta = solve(t(X) %*% X) %*% t(X) %*% y # The restuls are the same with coef(m1)
-# calculate the standard error using standand fomulas from OLS using the varcov matrix
+beta <- solve(t(X) %*% X) %*% t(X) %*% y # The restuls are the same with coef(m1)
+print(beta)
+```
+3. Calculate the standard errors of the regression
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+# Using standand fomulas from OLS using the varcov matrix
 k = ncol(X)
 n = nrow(X)
+beta0 <- y - X %*% beta
 # create means of each column:
-X_mean <- matrix(1, nrow = n) %*% cbind(mean(X[,1]), mean(X[,2]), mean(X[,3]), mean(X[,4]))
-# create a difference matrix:
-D <- X - X_mean
-# create the variance-covariance matrix
-C <- (n-1)^(-1) * t(D) %*% D
-se <- sqrt(diag(C))/sqrt(n)
+X_mean <- matrix(beta0, nrow = n) %*% cbind(mean(X[,1]), mean(X[,2]), mean(X[,3]), mean(X[,4]))
+D <- X - X_mean # create a difference matrix
+C <- (n-1)^(-1) * t(D) %*% D # create the variance-covariance matrix
+sqrt(diag(C))/sqrt(n)
 # using bootstrap with 49 and 499 replications
 df = data.frame(X1, X2, X3, Y)
 n = nrow(df)
@@ -113,51 +116,220 @@ for (B in 1:499) {
   # compute coefficient, store result
   coef_table[B, ] = solve(t(X)%*% X) %*% t(X) %*% y
 }
-# se. with 49 reps
+# se. with 49 replications:
 apply(coef_table[1:49,], 2, sd)/sqrt(49)
-# se. with 499 reps
+# se. with 499 reps:
 apply(coef_table, 2, sd)/sqrt(499)
 ```
-
 ## Exercise 4
-The log likelihood functions of probit, logit and linear prbability model are the same, dispite different function F(x). The probit model specifies cdf function, the logit model specifies the logistic funtion and the linear probability model specifies a linear function ($\beta$X). 
-```{r}
-# probit model
+The log likelihood function for probit, logit and OLS model are the same, dispite different function F(x):
+$$ logL(\beta) = \sum_{i=1}^{n} y_i logF(X_i\beta) + (1-y_i)log(1 - F(X_i\beta)) $$
+The probit model specifies F(x) as a standard normal cdf, the logit model cdf of the logistic distribution and OLS specifies a linear function ($\beta X$). Now we optimize the log likelihood of each model using the *optim* function in R.  
+```{r message=FALSE, warning=FALSE}
+X = as.matrix(cbind(1, X1, X2, X3))
+## Probit model ##
+# log likelihood function
 prob_lik <- function(beta) {  # likelihood 
-  logl <- sum(ydum* log(pnorm(X %*% beta)) + (1 - ydum)* log(1 - pnorm(X %*% beta)))
-  return(-logl)
+  u = X %*% beta # linear predictor
+  p = pnorm(u) # probability
+  logl <- sum(ydum * log(p) + (1 - ydum) * log(1- p))
+  return(-logl) # negative log-likelihood
 } 
-
-
-# the gradiant function is the same in ex.3
-
-# logit model
-logit_lik <- function(beta) {  # likelihood
-  logl <- sum(ydum*(log(1 + e^(X %*% beta))^(-1)) + (1 -ydum)*log(1 - (1 + e^(X %*% beta))^(-1)))
-  return(-logl)
+# gradient function
+prob_gr <- function (beta) {
+  u <- X %*% beta
+  p <- pnorm(u)
+  t <- dnorm(u) * (ydum - p) / (p * (1 - p)) # chainrule
+  -crossprod(X, t)  # gradient
 }
-
-# linear probability model
-ll_lm <- function(beta) {
-  sum(ydum*(log(X %*% beta) + (1 - ydum)*log(1 - X %*% beta)))
-}
-
-## compare with glm and lm estimtaes
-m2 <- glm(ydum ~ X, family = binomial(link = "probit"))
+# use optim package to maximize log likelihood 
+fit_prob <- optim(c(0,0,0,0), prob_lik, gr = prob_gr, method = "BFGS", hessian = TRUE)
+fit_prob$par
+# compare with glm estimates:
+m2 <- glm(ydum ~ X1 + X2 + X3, family = binomial(link = "probit"))
 m2$coefficients
 
-m3 <- glm(ydum ~ X, family = "binomial")
+## Logit model ##
+# log likelihood function
+logit_lik <- function(beta) {
+  u <- exp(X %*% beta) 
+  p <- u/(1 + u)
+  logl <- sum(t(ydum) %*% log(p) + t(1 - ydum) %*% log(1 - p))
+  return(-logl)
+}
+# gradient function
+logit_gr <- function(beta) {
+  grad <- beta*0
+  u <- exp(X %*% beta) 
+  p <- u/(1 + u)
+  for (i in 1:k) { 
+  grad[i] <- sum(X[,i] * (ydum - p))
+  }
+  return(-grad)
+}
+# optimize the log likelihood funtion using optim()
+fit_logit <- optim(c(0,0,0,0), logit_lik, logit_gr, method = "BFGS",  hessian = TRUE)
+fit_logit$par 
+# compare with glm estimates:
+m3 <- glm(ydum ~ X1 + X2 + X3, family = "binomial")
 m3$coefficients
 
-m4 <- lm(ydum ~ X)
-m4$coefficients
+## linear model ##
+# log likelihood function
+ols_lik <- function(beta) {
+  u = X %*% beta
+  p = u
+  logl <- sum((ydum) %*% log(p) + (1 - ydum) %*% log(1 - p))
+}
+fit_ols <- optim(c(0.5,0.1,0,0), ols_lik, gr = NULL) 
+fit_ols$par
 ```
-
-
-## Exercise 5
+Interpret and compare the estimated coefficients. How significant are they?
 ```{r}
-
-
-
+est_coef <- rbind(fit_prob$par, fit_logit$par, fit_ols$par)
+colnames(est_coef) <- c("Intercept", "X1", "X2", "X3")
+rownames(est_coef) <- c("Probit", "Logit", "OLS")
+est_coef
 ```
+Notice that OLS generates estimates with wrong signs for X2 and X3, indicating that OLS is a bad fit for our data (dummy variables). To examine how significant are these estimates, we calculate the standard deviations of estimates of each model by bootstraping coefficients. 
+```{r message=FALSE, warning=FALSE}
+df2 = data.frame(X1, X2, X3, ydum)      
+R = 10                       # number of bootstrap samples
+n = nrow(df2)                 # sample size
+k = ncol(df2)    # number of coefficients
+## LOGIT ##
+# set up a empty matrix B1
+B1 = matrix(nrow = R, ncol = k,
+           dimnames = list(paste("Sample",1:R), names(fit_logit$par)))
+for(i in 1:10) {
+  # sample credit data with replacement
+  boot_index = sample(x = 1:n, size = n, replace = TRUE)
+  boot.data = df2[boot_index, ]
+  X = as.matrix(cbind(1, boot.data[, 1:(ncol(boot.data) - 1)]))
+  ydum = as.matrix(boot.data[,ncol(boot.data)])
+  # fit the model on the boostrapped sample:
+  fit_logit2 <- optim(c(0,0,0,0), logit_lik, logit_gr, method = "BFGS", hessian = TRUE)
+  # store the coefficients
+  B1[i,] = fit_logit2$par
+}
+# get standard deviations from boostrap coefficients
+sd_logit <- apply(B1, 2, sd)
+## Probit ##
+B2 = matrix(nrow = R, ncol = k,
+            dimnames = list(paste("Sample",1:R), names(fit_prob$par)))
+for(i in 1:10) {
+  boot_index = sample(x = 1:n, size = n, replace = TRUE)
+  boot.data = df2[boot_index, ]
+  X = as.matrix(cbind(1, boot.data[, 1:(ncol(boot.data) - 1)]))
+  ydum = as.matrix(boot.data[,ncol(boot.data)])
+  fit_prob2 <- optim(c(0,0,0,0), prob_lik, gr = NULL, method = "BFGS", hessian = TRUE)
+  B2[i,] = fit_prob2$par
+}
+sd_probit <- apply(B2, 2, sd)
+## OLS ##
+B3 = matrix(nrow = R, ncol = k,
+            dimnames = list(paste("Sample",1:R), names(fit_ols$par)))
+for(i in 1:10) {
+  boot_index = sample(x = 1:n, size = n, replace = TRUE)
+  boot.data = df2[boot_index, ]
+  X = as.matrix(cbind(1, boot.data[, 1:(ncol(boot.data) - 1)]))
+  ydum = as.matrix(boot.data[,ncol(boot.data)])
+  #fit_ols <- optim(c(0.5,0.1,0,0), ols_lik, gr = NULL) 
+  B3[i,] = fit_ols$par
+}
+#sd_ols <- apply(B3, 2, sd)
+# fit_ols produces NaNs. Perhaps because OLS result is bad...
+sd_coef <- rbind(sd_probit, sd_logit) %>% print()
+```
+## Exercise 5
+The marginal effects of probit and logit models are $$\frac{\partial Pr(y_i = 1|Xi)}{\partial X_{ij}}  = F'(X\beta) \beta_j$$, namely, the pdf function times each coefficient($F'(X\beta) \beta_j$). with different specifications of $F(X\beta)$ (standard normal or logistic ). Therefore, the marginal effect of probit model is given by $\phi(X\beta)\beta$ and that of logit model is $\dfrac{\exp(X\beta)\beta}{(1 + exp(X\beta))^2}$. For simplicity, I then calculate the average of sample marginal effects. 
+```{r}
+## Probit Model ##
+pdf_probit <- dnorm(X %*% fit_prob$par)  
+probit_coef <- as.matrix(fit_prob$par)
+marginef_probit <- pdf_probit %*% t(probit_coef)
+# The marginal effects differ with the point of evaluation Xi for nonlinear models. 
+# I calculate average marginal effects to better interpret the result:
+avg_marginef_probit <- mean(pdf_probit) %*% t(probit_coef)
+print(avg_marginef_probit)
+## Logit Model ##
+pdf_logit <- dlogis(X %*% fit_logit$par)
+logit_coef <- as.matrix(fit_logit$par)
+marginef_logit <- pdf_logit %*% t(logit_coef)
+# average marginal effect:
+avg_marginef_logit <- mean(dlogis(pdf_logit)) %*% t(logit_coef)
+print(avg_marginef_logit)
+# cross-check with marginal effects calculated from glm estimates:
+mean(dnorm(predict(m2)))*coef(m2)
+mean(dlogis(predict(m3)))*coef(m3) # Note that there's a bit dif for logit estimates
+# Now try another way to get average marginal effect for logit models:
+# Pi = mean(ydum), where Pi = exp(XB)/(1+ exp(XB))
+marg_logit <- mean(ydum)*(1- mean(ydum))*fit_logit$par
+marg_logit # produces similar results with ave_marginef_logit
+```
+Compute the standard deviations of marginal effect using the delta method:
+```{r}
+library(numDeriv)
+## Logit Model ##
+# using the Delta method, define the (average) marginal effect function g(.) = f(Xbeta)*beta
+me_logit <- function (beta) {
+  u <- exp(X %*% beta) 
+  p <- u/(1 + u)
+  me = p %*% t(beta)
+}
+# calculate the Jacobian Matrix of g(.)
+j_logit <- jacobian(me_logit, beta)
+# get the variance of marginal effects:
+var_me_logit <- j_logit %*% vcov(m3) %*% t(j_logit)
+# Then the variance of average marginal effect (AME) is:
+var_ame_logit <- sum(var_me_logit)/(ncol(var_me_logit))^2
+sd_ame_logit <- sqrt(var_ame_logit) %>% print()  # 0.02238572
+# compare it with :
+sd(marginef_probit)
+## Probit Model ##
+me_probit <- function(beta) {
+  u = X %*% beta 
+  p = pnorm(u)
+  me = mean(p) %*% t(beta)
+}
+j_probit <- jacobian(me_probit, beta)
+var_me_probit <- j_probit %*% vcov(m2) %*% t(j_probit)
+var_ame_probit <- sum(var_me_probit)/(ncol(var_me_probit))^2
+sd_ame_probit <- sqrt(var_ame_probit) %>% print()  # 0.01176799
+# compare it with:
+sd(marginef_logit)
+```
+...using bootstrap:
+```{r message=FALSE, warning=FALSE}
+## Probit Nodel ##
+me_table_probit = matrix(0, 10, ncol = k)
+for(i in 1:10) {
+  boot_index = sample(x = 1:n, size = n, replace = TRUE)  # sample credit data with replacement
+  boot.data = df2[boot_index, ]
+  X = as.matrix(cbind(1, boot.data[, 1:(ncol(boot.data) - 1)]))
+  ydum = as.matrix(boot.data[,ncol(boot.data)])
+  # fit the AME on the boostrapped sample:
+  fit_prob <- optim(c(0,0,0,0), prob_lik, gr = prob_gr, method = "BFGS", hessian = TRUE)
+  pdf_probit <- dnorm(X %*% fit_prob$par)  
+  probit_coef <- as.matrix(fit_prob$par)
+  avg_marginef_probit <- mean(pdf_probit) %*% t(probit_coef)
+  me_table_probit[i,] = avg_marginef_probit  # store the coefficients
+}
+apply(me_table_probit, 2, sd)
+## Logit Model ##
+me_table_logit = matrix(0, 10, ncol = k)
+for(i in 1:10) {
+  boot_index = sample(x = 1:n, size = n, replace = TRUE) 
+  boot.data = df2[boot_index, ]
+  X = as.matrix(cbind(1, boot.data[, 1:(ncol(boot.data) - 1)]))
+  ydum = as.matrix(boot.data[,ncol(boot.data)])
+  fit_logit <- optim(c(0,0,0,0), logit_lik, logit_gr, method = "BFGS",  hessian = TRUE)
+  pdf_logit <- dlogis(X %*% fit_logit$par)
+  logit_coef <- as.matrix(fit_logit$par)
+  avg_marginef_logit <- mean(dlogis(pdf_logit)) %*% t(logit_coef)
+  me_table_logit[i,] = avg_marginef_logit  # store the coefficients
+}
+apply(me_table_logit, 2, sd)
+```
+
 
