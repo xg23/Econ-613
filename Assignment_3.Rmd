@@ -74,7 +74,7 @@ Define the probability that alternative *j* is chosen by individual *i* as:
 $$P_{ij} = Pr[y_i = j] = \dfrac{V_{ij}}{\sum_{k=1}^{m}V_{ik}}, ~~~  j = 1, ..., m, $$ 
 where $V_{ij} > 0$ can be general functions of regressors $X_i$ and parameters $\beta$. This is a *universal logit model*. Different specifications for $V_{ij}$ corresponds to specific models, such as multinomial logit and conditional logit models. In that sense, all these models are variants of the same model. They only differ in their parametrization of the systematic compotents $V_{ij}$.  
 
-The log likelihood function of the universal logit model is:
+The log likelihood function of the universal logit model is (assuming independent realizations by summing up all N individual contributions):
 $$ L = \sum_{i = 1}^{N} \sum_{j=1}^{m} y_{ij} ~ ln~ P_{ij}, ~~~~~ j = 1, ..., m, ~~~  i = 1, ..., N,$$
 where $P_{ij}$ is defined above. 
 
@@ -85,72 +85,65 @@ Since the price of a product varies by different choices, a conditional logit mo
 
 The probability of the *i*th househould choosing product *j* is given by
 $$ P_{ij} = Pr[y_i = j] = \dfrac{\exp(X_{ij}\beta)}{\sum_{k=1}^{m}exp(X_{ik}\beta)},~~~ j = 1, ...m $$ 
-where $X$ denotes price, the substrcipt *i* denotes the *i*th household, subscript *j* or *k* denotes the alternative, and parameter $\beta$ is contant across alternatives. Note that it is possible to go from alternative-varying regressors to alternative-invariant format. Let $X_i$ be a $K*1$ vector. Define $X_{ij}$ to be a $Km*1$ vector with zeros except that the *j*th block is $X_i$, that is $X_{ij} = [0'... 0', X_i, 0', ...0']'$, and define $$ \beta = [0', \beta_2',... \beta_m']'$$, where $\beta_1 = 0$ is a normalization. Then $X_i'\beta_j = X_{ij}'\beta$. 
+where $X$ denotes price, the substrcipt *i* denotes the *i*th household, subscript *j* or *k* denotes the alternative, and parameter $\beta$ is contant across alternatives. Note that it is possible to go from alternative-varying regressors to alternative-invariant format. Let $X_i$ be a $K*1$ vector. Define $X_{ij}$ to be a $Km*1$ vector with zeros except that the *j*th block is $X_i$, that is $X_{ij} = [0'... 0', X_i, 0', ...0']'$, and define $$ \beta = [0', \beta_2',... \beta_m']',$$ where $\beta_1 = 0$ is a normalization. Then $X_i'\beta_j = X_{ij}'\beta$. 
 
 The likelihood function of conditional multinomial model is: 
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE}
-loglik_cl = function(beta) {
-  X = marg[, 3:12] - marg[, 3] # set price of the first product as reference 
-  b = beta[1] # constant beta
-  alpha = beta[2:11]
-  alpha[1] = 0 
-  X_beta = X * b 
-  alpha_choice = matrix(nrow = nrow(marg), ncol = 1)
-  X_beta_j = matrix(nrow = nrow(marg), ncol = 1)
-  alpha_t = matrix(rep(t(alpha), times = nrow(marg)), ncol = ncol(t(alpha)), byrow = T)
-  for (i in 1: nrow(marg)) {
-    jstar  = marg[i, "choice"]
-    alpha_j = alpha[jstar]
-    alpha_choice[i] = alpha_j
-    X_beta_j[i] = X_beta[i, jstar]
+loglik_cl <- function(beta) {
+  X = marg[, 3:12] # price takes dif values for dif alternatives (1*10)
+  X_beta = X * beta # beta is a constant for each decision maker i. (1*10)
+  X_beta_j = matrix(nrow = nrow(marg), ncol = 1) # coefficient for a given choice j (N*1)
+  for (i in 1:nrow(marg)) {
+    jstar = marg[i, "choice"]
+    X_beta_j[i] = X_beta[i, jstar] 
   }
-  numerator = exp(X_beta_j + alpha_choice)
-  Xbeta_k =  exp(X_beta + alpha_t)
-  denominator = rowSums(Xbeta_k)
-  Pij = numerator / denominator
-  ll = log(Pij)
-  loglik_cl = - sum(ll)
+  numerator = exp(X_beta_j)
+  denominator = rowSums(exp(X_beta))
+  pij = numerator/denominator
+  ll = log(pij)
+  loglik_cl <- -sum(ll)
 }
-# optimize the likelihood using the nlm function. 
-fit_cl = nlm(f = loglik_cl, p = c(rep(0, 11)))
+fit_cl = nlm(f = loglik_cl, p = 0)
 fit_cl$estimate
-#
-#a <- function(beta) {
-#  X = marg[, 3:12] ## price takes dif values for dif alternatives
-#  beta = matrix(nrow = nrow(marg), ncol = 1) 
-#  X_beta = X * beta # a matrix of 4479*10
-#  Xj_beta = matrix(nrow = nrow(marg), ncol = 1) # 4470*1
-#  for (i in 1: nrow(marg)) {
-#    jstar = marg[i, "choice"] # choice made by household i. 
-    # beta_i = beta[i] # the effect of price is the same across alternatives but different for decision makers
-#    Xj_beta[i] = X_beta[i, jstar] # define X_ij*beta
-#  }
-#  numerator = exp(Xj_beta)
-#  denominator = rowSums(X_beta)
-#  Pij = numerator/denominator
-#  ll = log(Pij)
-#  a = - sum(ll)
-#}
-
-#fit_a = nlm(f = a, p = c(rep(0, 1)))
-#fit_a
 ```
-Interpret the coefficient on price: Note that the constant beta < 0, suggesting that an increase in the price of one alternative decreases the probability of choosing that alternative and increases the probability of choosing other alternatives. 
+Interpretation: Note that the estimated beta < 0, suggesting that an increase in the price of one alternative decreases the probability of choosing that alternative and increases the probability of choosing other alternatives. 
 
 ## Exercise 3 Second Model
-We are interested in the effect of family income on demand. Propose a model specification.
+We are interested in the effect of family income on demand. Propose a model specification:
 
-Since family income is a fixed constant for decision makers (households) and does not vary across product choices, a multinomial logit model is chosen to address alternative-invariant regressors. The probability of the *i*th household choosing product *j* is given by:
+Since family income is a fixed constant for decision makers and does not vary across product choices, a multinomial logit model is chosen to address alternative-invariant regressors. The probability of the *i*th household choosing product *j* is given by:
 $$ P_{ij} = Pr[y_i = j] = \dfrac{\exp(\alpha_j + X_{i}\beta_j)}{\sum_{k=1}^{m}exp(\alpha_k + X_{i}\beta_k)}, ~~~j = 1, ...m, $$
 where *X* denotes income. The likelihood function is:
 ```{r}
+a <- function(beta){
+  X = as.matrix(marg[, "Income"]) # income is a N*1 vector
+  beta = matrix(nrow = 1, ncol = 10) # alternative-specific constant (1*10)
+  beta[1] = 0  # set beta_1 to 0-- use product 1 as reference group 
+  beta_j = matrix(nrow = 1, ncol = 1)
+  X_beta = X %*% beta # returns a matrix of N*m
+  X_beta_j = matrix(nrow = nrow(marg), ncol = 1) # N*1
+ # alpha_t = matrix(rep(t(alpha), times = nrow(data)), ncol = ncol(t(alpha)), byrow = T)
+  for (i in 1: nrow(marg)) {
+    jstar  = marg[i, "choice"]
+    beta_j = beta[jstar]
+    X_beta_j[i] = X_beta[i, jstar]
+  }
+  numerator = exp(X_beta_j)
+  denominator = sum(exp(X_beta_j))
+  pr = numerator / denominator
+  ll = log(pr)
+  a = -sum(ll)
+}
+fit_a = nlm(f = a, p = c(rep(0, 10))) # Fail to debug.
+
 loglik_mnl = function(beta) {
   X = as.matrix(cbind(marg[, 13:15], marg[, 17:19], rep(1, nrow(marg)))) # 4470*7
   beta = matrix(nrow = 7, byrow = T) # create a matrix of 7*1
   X_beta_j = X %*% beta # 4470*1 
   
   for (i in 1:nrow(marg)) {
-  X_beta_j[i] = X[i, ] %>% beta
+    jstar = marg[i, "choice"]
+    X_beta_j[i] = X[i, jstar] %>% beta
   }
   numerator = exp(X_beta_j)
   denominator = sum(exp(X_beta_j))
@@ -159,27 +152,24 @@ loglik_mnl = function(beta) {
   loglik_mnl = - sum(ll)
 }
 # optimize the likelihood of multinomial model:
-#fit_mnl = nlm(f = loglik_mnl, p = rep(0, 7)) # something is wrong here, fail to debug.
+#fit_mnl = nlm(f = loglik_mnl, p = rep(0, 7)) 
 #fit_mnl
 ```
 ## Exercise 4 Marginal Effects
 Compute and interpret the marginal effects for the first and second models.
 ```{r}
 ## Marginal effect of the conditional logit model
-X = marg[, 3:12] - marg[, 3]
-b = fit_cl$estimate[1]
-alpha = fit_cl$estimate[2:11] 
-X_beta = X * b 
-alpha_choice = matrix(nrow = nrow(marg), ncol = 1)
-X_beta_j = matrix(nrow = nrow(marg), ncol = 1)
-alpha_t = matrix(rep(t(alpha), times = nrow(marg)), ncol = ncol(t(alpha)), byrow = T)
-xbetak =  exp(X_beta + alpha_t)
+X = marg[, 3:12] # N*m
+b = fit_cl$estimate # 1
+X_beta = X * b # N*m
+X_beta_j = matrix(nrow = nrow(marg), ncol = 1) # N*1
+xbetak =  exp(X_beta)
 denominator = rowSums(xbetak)
-pr_ij = as.matrix(xbetak/denominator) 
-pij = t(pr_ij) %*% pr_ij * (-b)
-a = matrix(rep(colSums(pr_ij) * b,10), ncol=10 )
-a = a * diag(10)
-me_cl = data.frame((pij + a)/nrow(marg))
+pr_ij = as.matrix(xbetak/denominator) # N*m
+pij = t(pr_ij) %*% pr_ij * (-b) # m*m (10*10)
+margin = matrix(rep(colSums(pr_ij) * b, 10), ncol=10 )
+margin = margin * diag(10)
+me_cl = (pij + margin)/nrow(marg)
 me_cl
 
 ## Marginal effect of the multinomial model
@@ -198,3 +188,111 @@ X = as.matrix(cbind(marg[, 13:15], marg[, 17:19], rep(1, nrow(marg))))
 ## Exercise 5 IIA
 Now combine the above two models to estimate the effect of price and family income on choices of margarine. The mixed logit model is specified as:
 $$ P_{ij} = \dfrac{exp(X_{ij}\beta ~ + W_i \gamma_j)}{\sum_{k = 1}^{m} exp(X_{ik}\beta + W_i\gamma_k)}, ~~~ j = 1, ..., m$$
+Its likelihood function is:
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+loglik_mixed = function(beta) {
+  X = marg[, 3:12] - marg[, 3] # set price of the first product as reference 
+  b = beta[1] # alternative-variant coefficient
+  alpha = beta[2:11] # alternative-invariant coefficient
+  alpha[1] = 0 
+  X_beta = X * b 
+  alpha_choice = matrix(nrow = nrow(marg), ncol = 1)
+  X_beta_j = matrix(nrow = nrow(marg), ncol = 1)
+  alpha_t = matrix(rep(t(alpha), times = nrow(marg)), ncol = ncol(t(alpha)), byrow = T)
+  for (i in 1: nrow(marg)) {
+    jstar  = marg[i, "choice"]
+    alpha_j = alpha[jstar]
+    alpha_choice[i] = alpha_j
+    X_beta_j[i] = X_beta[i, jstar]
+  }
+  numerator = exp(X_beta_j + alpha_choice)
+  Xbeta_k =  exp(X_beta + alpha_t)
+  denominator = rowSums(Xbeta_k)
+  Pij = numerator / denominator
+  ll = log(Pij)
+  loglik_mixed = - sum(ll)
+}
+# optimize the likelihood using the nlm function. 
+fit_mixed = nlm(f = loglik_mixed, p = c(rep(0, 11)))
+beta_f <- fit_mixed$estimate
+```
+# Recap: The IIA assumption
+
+The ratio of logit probabilities of any two alternatives *j* and *k* is
+$$ \dfrac{Pr(y_i = i)}{Pr(y_i = k)} = \dfrac{exp(V_{ij})}{exp(V_{ik})} = exp(V_{ij}- V_{ik})$$
+Note that the above ratio only depends on alternatives j and k. Because the ratio is independent of alternatives other than j and k, MNL logit models are said to be independent of irrelevant alternatives (IIA). IIA implies that presence or absence of another alternative should not alter the relative probabilities of any single decision-maker (conditional on the model’s systematic
+component).
+
+* Consider an alternative specification, where we remove one choice (the last one) from the data. 
+```{r}
+sub_marg <- marg %>% # create a subset of data which remove the 10th choice.
+  filter(choice < 10)
+loglik_mixed_2 = function(beta) {
+  X = sub_marg[, 3:11] - sub_marg[, 3] # do not include the price of 10th product
+  b = beta[1] # alternative-variant coefficient
+  alpha = beta[2:10] # alternative-invariant coefficient
+  alpha[1] = 0 # set the first product as reference group
+  X_beta = X * b 
+  alpha_choice = matrix(nrow = nrow(sub_marg), ncol = 1)
+  X_beta_j = matrix(nrow = nrow(sub_marg), ncol = 1)
+  alpha_t = matrix(rep(t(alpha), times = nrow(sub_marg)), ncol = ncol(t(alpha)), byrow = T)
+  for (i in 1: nrow(sub_marg)) {
+    jstar  = sub_marg[i, "choice"] 
+    alpha_j = alpha[jstar]
+    alpha_choice[i] = alpha_j
+    X_beta_j[i] = X_beta[i, jstar]
+  }
+  numerator = exp(X_beta_j + alpha_choice)
+  Xbeta_k =  exp(X_beta + alpha_t)
+  denominator = rowSums(Xbeta_k)
+  Pij = numerator / denominator
+  ll = log(Pij)
+  loglik_mixed_2 = - sum(ll)
+}
+fit_mixed_2 = nlm(f = loglik_mixed_2, p = c(rep(0, 10)))
+beta_r <- fit_mixed_2$estimate
+```
+By dropping one alternative (further tests can drop more irrelavant alternatives at a time) and reestimating the model, we can see that the coefficients do not change, indicating that IIA might hold. 
+
+* Compute the test statistics:
+
+Since
+$$ MTT = -2[L_r(\beta^r)- L_r(\beta^f)] = -2 ln \dfrac{L(\beta^r)}{L(\beta_f)} = 2 ln \dfrac{L(\beta^f)}{L(\beta_r)} = LR,$$
+where $ L(\beta^f)$ is the likelihood evaluated at the MLE and $ L(\beta^r)$ is the maximum of likelihood subject to the restriction (that r parameters unconstrained in the full likelihood analysis are assigned fixed values). 
+```{r}
+# calculate the likelihood evaluated at MLE (beta_f)
+X = marg[, 3:12] - marg[, 3] 
+b = beta_f[1] 
+alpha = as.matrix(beta_f[2:11]) # 10*1
+X_beta = X * b 
+alpha_t = matrix(rep(t(alpha), times = nrow(marg)), ncol = ncol(t(alpha)), byrow = T) # 4470*10
+Xbeta_k =  exp(X_beta + alpha_t) # 10*10
+denominator = rowSums(Xbeta_k)
+Pij = Xbeta_k / denominator
+ll = log(Pij)
+loglik_beta_f = sum(ll)
+# ML subject to restriction (beta_r)
+X = sub_marg[, 3:11] - sub_marg[, 3] 
+b = beta_r[1]
+alpha = beta_r[2:10] 
+X_beta = X * b 
+alpha_t = matrix(rep(t(alpha), times = nrow(sub_marg)), ncol = ncol(t(alpha)), byrow = T)
+Xbeta_k =  exp(X_beta + alpha_t)
+denominator = rowSums(Xbeta_k)
+Pij = Xbeta_k  / denominator
+ll = log(Pij)
+loglik_beta_r = sum(ll)
+## compute the test statistics
+mtt <- log(loglik_beta_f/loglik_beta_r) *2 
+# For sufficiently large sample size, the LR test statistic is chisqured distributed
+# a χ2 with r degrees of freedom
+pchisq(mtt, df = length(beta_r))
+```
+Another way to calculate the Hausman and McFadden Test by hand:
+```{r}
+beta_f1 <- beta_f[1:10]
+beta_diff <- beta_r - beta_f1
+hm <- beta_diff %*% solve(var(beta_r) - var(beta_f1)) %*% t(beta_diff)
+pv <- pchisq(hm,df = 2*10) # the degrees of freedom of the Chi-Square distribution used to test the LR Chi-Square statistic is defined by the number of models estimated (2) times the number of predictors in the model (10)
+```
+The result of statistical tests suggests that IIA holds. 
