@@ -36,24 +36,27 @@ apply(marg[, 3:12], 2, sd)
 # market share by product
 ms_product <- table(marg$choice)/4470
 names(ms_product) <- names(marg[,3:12])
-print(ms_product)
+print(ms_product) 
+```
+It shows that the first, second and fourth product take the largest market share. 
+```{r}
 # market share by product characteristics: brand and type
 brand_name <- names(marg[,3:12]) %>%
   str_replace_all("_Stk|_Tub", "")
 ms_brand <- cbind.data.frame(brand_name, ms_product) %>%
   group_by(brand_name) %>%
-  summarise(market_share = sum(Freq))
+  summarise(market_share = sum(Freq)) %>%
+  arrange(desc(market_share))
 print(ms_brand)
 # by product type (stick and tub)
 sum(ms_product[1:6]) # market share of stick
 sum(ms_product[7:10]) # market share of tub
 ```
 * Mapping between observed attributes and choices.
-
 Create tables of choices by different household attributes:
 ```{r}
 # income level & choices
-table(marg$Income, marg$choice)
+t1 <- table(marg$Income, marg$choice) %>% print()
 # family size: 
 table(marg$Fam_Size, marg$choice)
 # education status & choices
@@ -70,21 +73,18 @@ There are *m* alternatives and the dependent variable *y* is defined to take val
 Define the probability that alternative *j* is chosen by individual *i* as: 
 $$P_{ij} = Pr[y_i = j] = \dfrac{V_{ij}}{\sum_{k=1}^{m}V_{ik}}, ~~~  j = 1, ..., m, $$ 
 where $V_{ij} > 0$ can be general functions of regressors $X_i$ and parameters $\beta$. This is a *universal logit model*. Different specifications for $V_{ij}$ corresponds to specific models, such as multinomial logit and conditional logit models. In that sense, all these models are variants of the same model. They only differ in their parametrization of the systematic compotents $V_{ij}$.  
-
 The log likelihood function of the universal logit model is (assuming independent realizations by summing up all N individual contributions):
 $$ L = \sum_{i = 1}^{N} \sum_{j=1}^{m} y_{ij} ~ ln~ P_{ij}, ~~~~~ j = 1, ..., m, ~~~  i = 1, ..., N,$$
-where $P_{ij}$ is defined above. 
+where $P_{ij}$ is defined above.
 
 ## Exercise 2 First Model
 * We are interested in the effect of price on demand. Propose a model specification.
 
-Since the price of a product varies by different choices, a conditional logit model is chosen to deal with regressors varying across alternatives. Here $V_{ij} = X_{ij}$, specifying characteristics of the alternatives (price). 
-
-The probability of the *i*th househould choosing product *j* is given by
+Since the price of a product varies by different choices, a conditional logit model is chosen. Here $V_{ij} = X_{ij}$, specifying characteristics of the alternatives (price). The probability of the *i*th househould choosing product *j* is given by
 $$ P_{ij} = Pr[y_i = j] = \dfrac{\exp(X_{ij}\beta)}{\sum_{k=1}^{m}exp(X_{ik}\beta)},~~~ j = 1, ...m $$ 
 where $X$ denotes price, the substrcipt *i* denotes the *i*th household, subscript *j* or *k* denotes the alternative, and parameter $\beta$ is contant across alternatives. Note that it is possible to go from alternative-varying regressors to alternative-invariant format. Let $X_i$ be a $K*1$ vector. Define $X_{ij}$ to be a $Km*1$ vector with zeros except that the *j*th block is $X_i$, that is $X_{ij} = [0'... 0', X_i, 0', ...0']'$, and define $$ \beta = [0', \beta_2',... \beta_m']',$$ where $\beta_1 = 0$ is a normalization. Then $X_i'\beta_j = X_{ij}'\beta$. 
 
-The likelihood function of conditional multinomial model is: 
+* The likelihood function of conditional multinomial model and its optimization
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE}
 loglik_cl <- function(beta) {
   X = marg[, 3:12] # price takes dif values for dif alternatives (1*10)
@@ -102,13 +102,12 @@ loglik_cl <- function(beta) {
 }
 # optimize the likelihood using optim()
 fit_cl <- optim(0, loglik_cl, method = "BFGS",  hessian = TRUE)
-fit_cl$par
-# using nlm() returns the same result: nlm(loglik_cl, 0)
+fit_cl$par # using nlm() returns the same result: nlm(loglik_cl, 0)
 ```
 Interpretation: Note that the estimated beta < 0, it suggests that an increase in the price of one alternative decreases the probability of choosing that alternative and increases the probability of choosing other alternatives. 
 
 ## Exercise 3 Second Model
-We are interested in the effect of family income on demand. Propose a model specification.
+* We are interested in the effect of family income on demand. Propose a model specification.
 
 Since family income is a fixed constant for households and does not vary across product choices, a multinomial logit model is chosen to address alternative-invariant regressors. The probability of the *i*th household choosing product *j* is given by:
 $$ P_{ij} = Pr[y_i = j] = \dfrac{\exp(\alpha_j + X_{i}\beta_j)}{\sum_{k=1}^{m}exp(\alpha_k + X_{i}\beta_k)}, ~~~j = 1, ...m, $$
@@ -131,18 +130,15 @@ loglik_mnl <- function(beta) {
   ll = log(pij)
   return(-sum(ll))
 }
-# fit_mnl = nlm(loglik_mnl, c(rep(0.1, 10))) # fail to debug... nlm() cannot sucessfully optimize likelihood here. 
 # Use optim funtion to optimize the likelihood:
 fit_mnl = optim(c(rep(0, 10)), loglik_mnl, method = "BFGS",  hessian = TRUE)
-fit_mnl$par
+fit_mnl$par # nlm() does not work here...
 ```
-Interpretation of MNL estimates is relative to the reference group, here I set the first product as the base gategory. Therefore, the coefficients for the first product(PKK_stk) is normalized to zero. Compared to *PKK_stk*, a higher family income leads to reduced likelihood of buying all other products (since all other coefficients are negative). It seems a bit counter-intuitive and lacking variation in consumption choices. Look at the relationship of customers' choices and their family income, and the average price of each product:
+Interpretation of MNL estimates is relative to the reference group. I set the first product as the base group, so the coefficients for the first product is normalized to zero. Compared to *PKK_stk*, higher income levels lead to reduced likelihood of buying all other products (since all other coefficients are negative), which seems to lack variation in cunsumption choice. Go to *t1* in *Ex1* to look at the relation between customers' choices and their income level. Then check the average price of each product:
 ```{r}
-table(marg$choice, marg$Income)
-marg[,3:12] %>% 
-  summarise_all(mean) 
+marg[,3:12] %>% summarise_all(mean) 
 ```
-Indeed, the first product is the most popular one, it might be true that people make this decison independent of their income. Note that richer families do not always prefer more expensive products than households with relatively low family income-- many of them still choose inexpensive products. It suggests that family income might not lead to choices of more expensive products. Now we change a reference group to further test the effct family income on households' choices of margarine. The seventh product *PSS_Tub* is chosen, because it is more expensive than the first product, yet still attracts a lot of customers.
+Indeed, the first product is the most popular one, it might be true that people make this decison independent of their income. Note that richer families do not always prefer more expensive products-- many of them still choose inexpensive products. It suggests that family income might not lead to choices of more expensive products. Now we change a reference group to further test the effct family income on households' choice of margarine. The seventh product is chosen, because it is more expensive than the first one, yet still attracts a lot of customers.
 ```{r}
 loglik_mnl_2 <- function(beta) {
   X = as.matrix(marg[, "Income"]) 
@@ -162,12 +158,12 @@ loglik_mnl_2 <- function(beta) {
 fit_mnl_2 = optim(c(rep(0, 10)), loglik_mnl_2, method = "BFGS",  hessian = TRUE)
 fit_mnl_2$par
 ```
-Now we have some variation in consumption choice with regard to income. Compared to the seventh product-- *PSS _Tub* , a higher family income leads to greater likelihood of purchasing the first(*PPK_Stk*), second (*PBB_Stk*) and fourth (*PHse_Stk*) product (since their coefficients are positive), and reduced likelihood of all other products as their coefficients are negative. By changing different reference groups, it turns out that households are more likely to choose the first, second and fourth product consistently, with an increase of family income. However, the prices of these three product are not very expensive, indicating that family income might not be a good discriminator for inexpensive consumer packaged goods (CPG) choice such as margarine. 
+Now we have some variation in consumption choice with regard to income. Compared to the seventh product, higher family income levels lead to greater likelihood of purchasing the first, second and fourth product (since their coefficients are positive), and reduced likelihood of all other products as their coefficients are negative. Changing different reference groups, MNL models show that households are consistently more likely to choose the first, second and fourth product, with an increase of family income. However, the prices of these three product are not very expensive, indicating that family income might not be a good discriminator for consumer packaged goods (CPG) choice such as margarine.
 
 ## Exercise 4 Marginal Effects
 Compute and interpret the marginal effects for the first and second models.
 ```{r}
-## Marginal effect of the conditional logit model
+# Marginal effect of the conditional logit model
 X = marg[, 3:12] # N*m
 b = fit_cl$par # 1
 X_beta = X * b # N*m
@@ -180,8 +176,7 @@ margin = matrix(rep(colSums(pr_ij) * b, 10), ncol=10 )
 margin = margin * diag(10)
 me_cl = (pij + margin)/nrow(marg)
 me_cl
-
-## Marginal effect of the multinomial model
+# Marginal effect of the multinomial model
 X = as.matrix(marg[, "Income"])
 beta = matrix(fit_mnl$par, nrow = 1, byrow = T)
 X_beta_j = X %*% beta
@@ -196,7 +191,7 @@ me_mnl
 ## Exercise 5 IIA
 Now combine the above two models to estimate the effect of price and family income on choices of margarine. The mixed logit model is specified as:
 $$ P_{ij} = \dfrac{exp(X_{ij}\beta ~ + W_i \gamma_j)}{\sum_{k = 1}^{m} exp(X_{ik}\beta + W_i\gamma_k)}, ~~~ j = 1, ..., m$$
-Its likelihood function is:
+Its likelihood function and optimization:
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE}
 loglik_mixed = function(beta) {
   X = marg[, 3:12] - marg[, 3] # set price of the first product as reference 
@@ -220,18 +215,17 @@ loglik_mixed = function(beta) {
   ll = log(Pij)
   loglik_mixed = - sum(ll)
 }
-# optimize the likelihood: # nlm(f = loglik_mixed, p = c(rep(0, 11))) returns the same result but takes longer.
-fit_mixed = nlm(f = loglik_mixed, p = c(rep(0, 11))) 
+# optimize the likelihood: 
+fit_mixed = nlm(f = loglik_mixed, p = c(rep(0, 11))) # nlm() returns the same result but takes longer.
 beta_f <- fit_mixed$estimate %>% print() 
 ```
 ## Recap: The IIA assumption
 The ratio of logit probabilities of any two alternatives *j* and *k* is
 $$ \dfrac{Pr(y_i = i)}{Pr(y_i = k)} = \dfrac{exp(V_{ij})}{exp(V_{ik})} = exp(V_{ij}- V_{ik})$$
-Note that the above ratio only depends on alternatives j and k. Because the ratio is independent of alternatives other than j and k, MNL logit models are said to be independent of irrelevant alternatives (IIA). IIA implies that presence or absence of another alternative should not alter the relative probabilities of any single decision-maker (conditional on the model’s systematic
-component).
+Note that the above ratio only depends on alternatives j and k. Because the ratio is independent of alternatives other than j and k, MNL logit models are said to be independent of irrelevant alternatives (IIA). IIA implies that presence or absence of another alternative should not alter the relative probabilities of any single decision-maker (conditional on the model’s systematic component).
 
 * Consider an alternative specification, where we remove one choice (the last one) from the data. 
-```{r}
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
 sub_marg <- marg %>% # create a subset of data which remove the 10th choice.
   filter(choice < 10)
 loglik_mixed_2 = function(beta) {
@@ -260,7 +254,6 @@ fit_mixed_2 <- nlm(loglik_mixed_2, c(rep(0, 10)))
 beta_r <- fit_mixed_2$estimate %>% print()
 ```
 By dropping one alternative (further tests can drop more irrelavant alternatives at a time) and reestimating the model, we can see that the coefficients do not change, indicating that IIA might hold. 
-
 * Compute the test statistics:
 
 $$ MTT = -2[L_r(\beta^r)- L_r(\beta^f)] = -2 ln \dfrac{L(\beta^r)}{L(\beta_f)} = 2 ln \dfrac{L(\beta^f)}{L(\beta_r)} = LR,$$
